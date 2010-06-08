@@ -89,9 +89,9 @@ GNUNET_permute (int mode, unsigned int n)
   ret = GNUNET_malloc (n * sizeof (int));
   for (i = 0; i < n; i++)
     ret[i] = i;
-  for (i = 0; i < n; i++)
+  for (i = n-1; i>0; i--)
     {
-      x = GNUNET_random_u32 (mode, n);
+      x = GNUNET_random_u32 (mode, i+1);
       tmp = ret[x];
       ret[x] = ret[i];
       ret[i] = tmp;
