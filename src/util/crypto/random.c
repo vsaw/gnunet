@@ -40,6 +40,7 @@ GNUNET_random_u32 (int mode, unsigned int i)
   static unsigned int invokeCount;
 #endif
   unsigned int ret;
+  unsigned int ul;
 
   GNUNET_GE_ASSERT (NULL, i > 0);
 
@@ -51,11 +52,13 @@ GNUNET_random_u32 (int mode, unsigned int i)
       if ((invokeCount++ % 256) == 0)
         gcry_fast_random_poll ();
 #endif
-      ret = rand ();            /* in case gcry_randomize fails,
-                                   we at least get a pseudo-
-                                   random number this way */
-      gcry_randomize ((unsigned char *) &ret,
-                      sizeof (unsigned int), GCRY_STRONG_RANDOM);
+     ul = ((unsigned int)-1) - (((unsigned int)-1) % i);
+      do
+	{
+	  gcry_randomize ((unsigned char *) &ret,
+			  sizeof (uint32_t), GCRY_STRONG_RANDOM);
+	}
+      while (ret >= ul);
       GNUNET_unlock_gcrypt_ ();
       return ret % i;
     }
@@ -106,13 +109,19 @@ unsigned long long
 GNUNET_random_u64 (int mode, unsigned long long u)
 {
   unsigned long long ret;
+  unsigned long long ul;
 
   GNUNET_GE_ASSERT (NULL, u > 0);
   if (mode == GNUNET_RANDOM_QUALITY_STRONG)
     {
       GNUNET_lock_gcrypt_ ();
-      gcry_randomize ((unsigned char *) &ret,
-                      sizeof (unsigned long long), GCRY_STRONG_RANDOM);
+      ul = ((unsigned long long)-1LL) - (((unsigned long long)-1LL) % u);
+      do
+	{
+	  gcry_randomize ((unsigned char *) &ret,
+			  sizeof (uint64_t), GCRY_STRONG_RANDOM);
+	}
+      while (ret >= ul);
       GNUNET_unlock_gcrypt_ ();
       return ret % u;
     }
