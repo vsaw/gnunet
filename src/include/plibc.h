@@ -1,6 +1,6 @@
 /*
      This file is part of PlibC.
-     (C) 2005, 2006, 2007, 2008, 2009 Nils Durner (and other contributing authors)
+     (C) 2005, 2006, 2007, 2008, 2009, 2010 Nils Durner (and other contributing authors)
 
 	   This library is free software; you can redistribute it and/or
 	   modify it under the terms of the GNU Lesser General Public
@@ -22,7 +22,7 @@
  * @brief PlibC header
  * @attention This file is usually not installed under Unix,
  *            so ship it with your application
- * @version $Revision: 50 $
+ * @version $Revision: 70 $
  */
 
 #ifndef _PLIBC_H_
@@ -51,7 +51,8 @@ extern "C" {
 #endif
 
 #include <windows.h>
-#include <Ws2tcpip.h>
+#include <ws2tcpip.h>
+#include <sys/types.h>
 #include <time.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -70,12 +71,6 @@ extern "C" {
 #define Li2Double(x) ((double)((x).HighPart) * 4.294967296E9 + \
   (double)((x).LowPart))
 
-#define socklen_t int
-#define ssize_t int
-#define off_t int
-#define int64_t long long
-#define int32_t long
-
 struct stat64
 {
     _dev_t st_dev;
@@ -91,11 +86,20 @@ struct stat64
     __time64_t st_ctime;
 };
 
+typedef unsigned int sa_family_t;
+
+struct sockaddr_un {
+  short sun_family; /*AF_UNIX*/
+  char sun_path[108]; /*path name */
+};
+
 #ifndef pid_t
-	#define pid_t int
+  #define pid_t DWORD
 #endif
 
-typedef int error_t;
+#ifndef error_t
+  #define error_t int
+#endif
 
 #ifndef WEXITSTATUS
 	#define WEXITSTATUS(status) (((status) & 0xff00) >> 8)
@@ -104,6 +108,12 @@ typedef int error_t;
 #ifndef MSG_DONTWAIT
   #define MSG_DONTWAIT 0
 #endif
+
+enum
+{
+  _SC_PAGESIZE = 30,
+  _SC_PAGE_SIZE = 30
+};
 
 /* Thanks to the Cygwin project */
 #define ENOCSI 43	/* No CSI structure available */
@@ -327,9 +337,9 @@ char *plibc_ChooseFile(char *pszTitle, unsigned long ulFlags);
 long QueryRegistry(HKEY hMainKey, char *pszKey, char *pszSubKey,
               char *pszBuffer, long *pdLength);
 
-BOOL __win_IsHandleMarkedAsBlocking(SOCKET hHandle);
-void __win_SetHandleBlockingMode(SOCKET s, BOOL bBlocking);
-void __win_DiscardHandleBlockingMode(SOCKET s);
+BOOL __win_IsHandleMarkedAsBlocking(int hHandle);
+void __win_SetHandleBlockingMode(int s, BOOL bBlocking);
+void __win_DiscardHandleBlockingMode(int s);
 int _win_isSocketValid(int s);
 int plibc_conv_to_win_path(const char *pszUnix, char *pszWindows);
 unsigned plibc_get_handle_count();
@@ -386,6 +396,7 @@ int _win_remove(const char *path);
 int _win_rename(const char *oldname, const char *newname);
 int _win_stat(const char *path, struct stat *buffer);
 int _win_stat64(const char *path, struct stat64 *buffer);
+long _win_sysconf(int name);
 int _win_unlink(const char *filename);
 int _win_write(int fildes, const void *buf, size_t nbyte);
 int _win_read(int fildes, void *buf, size_t nbyte);
@@ -398,7 +409,7 @@ int _win_munmap(void *start, size_t length);
 int _win_lstat(const char *path, struct stat *buf);
 int _win_lstat64(const char *path, struct stat64 *buf);
 int _win_readlink(const char *path, char *buf, size_t bufsize);
-int _win_accept(SOCKET s, struct sockaddr *addr, int *addrlen);
+int _win_accept(int s, struct sockaddr *addr, int *addrlen);
 int _win_printf(const char *format,...);
 int _win_fprintf(FILE *f,const char *format,...);
 int _win_vprintf(const char *format, va_list ap);
@@ -414,27 +425,27 @@ int _win_vscanf(const char *format, va_list arg_ptr);
 int _win_scanf(const char *format, ...);
 int _win_fscanf(FILE *stream, const char *format, ...);
 pid_t _win_waitpid(pid_t pid, int *stat_loc, int options);
-int _win_bind(SOCKET s, const struct sockaddr *name, int namelen);
-int _win_connect(SOCKET s,const struct sockaddr *name, int namelen);
-int _win_getpeername(SOCKET s, struct sockaddr *name,
+int _win_bind(int s, const struct sockaddr *name, int namelen);
+int _win_connect(int s,const struct sockaddr *name, int namelen);
+int _win_getpeername(int s, struct sockaddr *name,
                 int *namelen);
-int _win_getsockname(SOCKET s, struct sockaddr *name,
+int _win_getsockname(int s, struct sockaddr *name,
                 int *namelen);
-int _win_getsockopt(SOCKET s, int level, int optname, char *optval,
+int _win_getsockopt(int s, int level, int optname, char *optval,
 				int *optlen);
-int _win_listen(SOCKET s, int backlog);
-int _win_recv(SOCKET s, char *buf, int len, int flags);
-int _win_recvfrom(SOCKET s, void *buf, int len, int flags,
+int _win_listen(int s, int backlog);
+int _win_recv(int s, char *buf, int len, int flags);
+int _win_recvfrom(int s, void *buf, int len, int flags,
              struct sockaddr *from, int *fromlen);
 int _win_select(int max_fd, fd_set * rfds, fd_set * wfds, fd_set * efds,
                 const struct timeval *tv);
-int _win_send(SOCKET s, const char *buf, int len, int flags);
-int _win_sendto(SOCKET s, const char *buf, int len, int flags,
+int _win_send(int s, const char *buf, int len, int flags);
+int _win_sendto(int s, const char *buf, int len, int flags,
                 const struct sockaddr *to, int tolen);
-int _win_setsockopt(SOCKET s, int level, int optname, const void *optval,
+int _win_setsockopt(int s, int level, int optname, const void *optval,
                     int optlen);
-int _win_shutdown(SOCKET s, int how);
-SOCKET _win_socket(int af, int type, int protocol);
+int _win_shutdown(int s, int how);
+int _win_socket(int af, int type, int protocol);
 struct hostent *_win_gethostbyaddr(const char *addr, int len, int type);
 struct hostent *_win_gethostbyname(const char *name);
 struct hostent *gethostbyname2(const char *name, int af);
@@ -449,6 +460,7 @@ char *strndup (const char *s, size_t n);
 size_t strnlen (const char *str, size_t maxlen);
 #endif
 char *stpcpy(char *dest, const char *src);
+char *strcasestr(const char *haystack_start, const char *needle_start);
 
 #define strcasecmp(a, b) stricmp(a, b)
 #define strncasecmp(a, b, c) strnicmp(a, b, c)
@@ -458,8 +470,8 @@ char *stpcpy(char *dest, const char *src);
 #ifndef WINDOWS
  #define DIR_SEPARATOR '/'
  #define DIR_SEPARATOR_STR "/"
- #define PATH_SEPARATOR ';'
- #define PATH_SEPARATOR_STR ";"
+ #define PATH_SEPARATOR ':'
+ #define PATH_SEPARATOR_STR ":"
  #define NEWLINE "\n"
 
 #ifdef ENABLE_NLS
@@ -486,6 +498,7 @@ char *stpcpy(char *dest, const char *src);
  #define RENAME(o, n) rename(o, n)
  #define STAT(p, b) stat(p, b)
  #define STAT64(p, b) stat64(p, b)
+ #define SYSCONF(n) sysconf(n)
  #define UNLINK(f) unlink(f)
  #define WRITE(f, b, n) write(f, b, n)
  #define READ(f, b, n) read(f, b, n)
@@ -493,6 +506,7 @@ char *stpcpy(char *dest, const char *src);
  #define GN_FWRITE(b, s, c, f) fwrite(b, s, c, f)
  #define SYMLINK(a, b) symlink(a, b)
  #define MMAP(s, l, p, f, d, o) mmap(s, l, p, f, d, o)
+ #define MKFIFO(p, m) mkfifo(p, m)
  #define MUNMAP(s, l) munmap(s, l)
  #define STRERROR(i) strerror(i)
  #define RANDOM() random()
@@ -551,8 +565,8 @@ char *stpcpy(char *dest, const char *src);
 #else
  #define DIR_SEPARATOR '\\'
  #define DIR_SEPARATOR_STR "\\"
- #define PATH_SEPARATOR ':'
- #define PATH_SEPARATOR_STR ":"
+ #define PATH_SEPARATOR ';'
+ #define PATH_SEPARATOR_STR ";"
  #define NEWLINE "\r\n"
 
 #ifdef ENABLE_NLS
@@ -580,6 +594,7 @@ char *stpcpy(char *dest, const char *src);
  #define RENAME(o, n) _win_rename(o, n)
  #define STAT(p, b) _win_stat(p, b)
  #define STAT64(p, b) _win_stat64(p, b)
+ #define SYSCONF(n) _win_sysconf(n)
  #define UNLINK(f) _win_unlink(f)
  #define WRITE(f, b, n) _win_write(f, b, n)
  #define READ(f, b, n) _win_read(f, b, n)
@@ -587,6 +602,7 @@ char *stpcpy(char *dest, const char *src);
  #define GN_FWRITE(b, s, c, f) _win_fwrite(b, s, c, f)
  #define SYMLINK(a, b) _win_symlink(a, b)
  #define MMAP(s, l, p, f, d, o) _win_mmap(s, l, p, f, d, o)
+ #define MKFIFO(p, m) _win_mkfifo(p, m)
  #define MUNMAP(s, l) _win_munmap(s, l)
  #define STRERROR(i) _win_strerror(i)
  #define READLINK(p, b, s) _win_readlink(p, b, s)
