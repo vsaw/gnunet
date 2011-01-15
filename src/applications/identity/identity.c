@@ -423,7 +423,7 @@ getPeerIdentity (const GNUNET_RSA_PublicKey * pubKey,
                  GNUNET_PeerIdentity * result)
 {
   if (pubKey == NULL)
-    memset (&result, 0, sizeof (GNUNET_PeerIdentity));
+    memset (result, 0, sizeof (GNUNET_PeerIdentity));
   else
     GNUNET_hash (pubKey, sizeof (GNUNET_RSA_PublicKey), &result->hashPubKey);
 }
