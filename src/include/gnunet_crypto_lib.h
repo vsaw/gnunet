@@ -1133,6 +1133,16 @@ GNUNET_CRYPTO_ecdsa_key_get_anonymous (void);
 
 /**
  * @ingroup crypto
+ * Get the shared private key we use for anonymous users.
+ *
+ * @return "anonymous" private key; do not free
+ */
+const struct GNUNET_CRYPTO_EddsaPrivateKey *
+GNUNET_CRYPTO_eddsa_key_get_anonymous (void);
+
+
+/**
+ * @ingroup crypto
  * Setup a hostkey file for a peer given the name of the
  * configuration file (!).  This function is used so that
  * at a later point code can be certain that reading a
