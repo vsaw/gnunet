@@ -217,13 +217,15 @@ REGEX_INTERNAL_announce_cancel (struct REGEX_INTERNAL_Announcement *h);
  * @param get_path_length Lenght of get_path.
  * @param put_path Path of the put request.
  * @param put_path_length Length of the put_path.
+ * @param key The DHT key where the peer was found.
  */
 typedef void (*REGEX_INTERNAL_Found)(void *cls,
                                    const struct GNUNET_PeerIdentity *id,
                                    const struct GNUNET_PeerIdentity *get_path,
                                    unsigned int get_path_length,
                                    const struct GNUNET_PeerIdentity *put_path,
-                                   unsigned int put_path_length);
+                                   unsigned int put_path_length,
+                                   const struct GNUNET_HashCode *key);
 
 
 /**

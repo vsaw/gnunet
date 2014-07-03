@@ -92,13 +92,15 @@ GNUNET_REGEX_announce_cancel (struct GNUNET_REGEX_Announcement *a);
  * @param get_path_length Lenght of @a get_path.
  * @param put_path Path of the put request.
  * @param put_path_length Length of the @a put_path.
+ * @param key The DHT key where the peer was found.
  */
 typedef void (*GNUNET_REGEX_Found)(void *cls,
                                    const struct GNUNET_PeerIdentity *id,
                                    const struct GNUNET_PeerIdentity *get_path,
                                    unsigned int get_path_length,
                                    const struct GNUNET_PeerIdentity *put_path,
-                                   unsigned int put_path_length);
+                                   unsigned int put_path_length,
+                                   const struct GNUNET_HashCode *key);
 
 
 /**

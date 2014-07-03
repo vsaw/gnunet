@@ -84,6 +84,11 @@ struct ResultMessage
   struct GNUNET_MessageHeader header;
 
   /**
+   * The DHT key where the peer was found.
+   */
+  struct GNUNET_HashCode key;
+
+  /**
    * Number of entries in the GET path.
    */
   uint16_t get_path_length;
