@@ -388,7 +388,7 @@ dht_get_string_accept_handler (void *cls, struct GNUNET_TIME_Absolute exp,
   info->callback (info->callback_cls,
                   &block->peer,
                   get_path, get_path_length,
-                  put_path, put_path_length);
+                  put_path, put_path_length, key);
 }
 
 

@@ -272,7 +272,7 @@ handle_search_response (void *cls,
       s->callback (s->callback_cls,
 		   pid,
 		   &pid[1], gpl,
-		   &pid[1 + gpl], ppl);
+		   &pid[1 + gpl], ppl, &result->key);
       return;
     }
   }

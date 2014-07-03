@@ -253,6 +253,7 @@ handle_announce (void *cls,
  * @param get_path_length Lenght of get_path.
  * @param put_path Path of the put request.
  * @param put_path_length Length of the put_path.
+ * @param key The DHT key where the peer was found.
  */
 static void
 handle_search_result (void *cls,
@@ -260,7 +261,8 @@ handle_search_result (void *cls,
 		      const struct GNUNET_PeerIdentity *get_path,
 		      unsigned int get_path_length,
 		      const struct GNUNET_PeerIdentity *put_path,
-		      unsigned int put_path_length)
+		      unsigned int put_path_length,
+		      const struct GNUNET_HashCode *key)
 {
   struct ClientEntry *ce = cls;
   struct ResultMessage *result;
@@ -282,6 +284,7 @@ handle_search_result (void *cls,
   result->get_path_length = htons ((uint16_t) get_path_length);
   result->put_path_length = htons ((uint16_t) put_path_length);
   result->id = *id;
+  result->key = *key;
   gp = &result->id;
   memcpy (&gp[1],
 	  get_path,
