@@ -37,9 +37,13 @@
 
 static struct GNUNET_CRYPTO_EddsaPrivateKey *key;
 
-
+/**
+ * Sign and Verify given the key
+ *
+ * @param key The private key to use
+ */
 static int
-testSignVerify ()
+testSignVerify (struct GNUNET_CRYPTO_EddsaPrivateKey *key)
 {
   struct GNUNET_CRYPTO_EddsaSignature sig;
   struct GNUNET_CRYPTO_EccSignaturePurpose purp;
@@ -188,8 +192,12 @@ main (int argc, char *argv[])
   if (GNUNET_OK != testSignPerformance ())
     failure_count++;
 #endif
-  if (GNUNET_OK != testSignVerify ())
+  if (GNUNET_OK != testSignVerify (key))
     failure_count++;
+  if (GNUNET_OK != testSignVerify (GNUNET_CRYPTO_eddsa_key_get_anonymous ()))
+  {
+    failure_count++;
+  }
   GNUNET_free (key);
   if (GNUNET_OK != testCreateFromFile ())
     failure_count++;

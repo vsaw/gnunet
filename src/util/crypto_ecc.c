@@ -622,6 +622,34 @@ GNUNET_CRYPTO_ecdsa_key_get_anonymous ()
 
 
 /**
+ * Get the shared private key we use for anonymous users.
+ *
+ * @return "anonymous" private key
+ */
+const struct GNUNET_CRYPTO_EddsaPrivateKey *
+GNUNET_CRYPTO_eddsa_key_get_anonymous ()
+{
+  /**
+   * 'anonymous' pseudonym (global static, d=1, public key = G
+   * (generator).
+   */
+  static struct GNUNET_CRYPTO_EddsaPrivateKey anonymous;
+  static int once;
+
+  if (once)
+  {
+    return &anonymous;
+  }
+
+  GNUNET_CRYPTO_mpi_print_unsigned (anonymous.d,
+       sizeof (anonymous.d),
+       GCRYMPI_CONST_ONE);
+  once = 1;
+  return &anonymous;
+}
+
+
+/**
  * Wait for a short time (we're trying to lock a file or want
  * to give another process a shot at finishing a disk write, etc.).
  * Sleeps for 100ms (as that should be long enough for virtually all
