@@ -717,7 +717,8 @@ regex_found_handler (void *cls,
                      const struct GNUNET_PeerIdentity *get_path,
                      unsigned int get_path_length,
                      const struct GNUNET_PeerIdentity *put_path,
-                     unsigned int put_path_length)
+                     unsigned int put_path_length,
+                     const struct GNUNET_HashCode *key)
 {
   struct RegexPeer *peer = cls;
   char output_buffer[512];

@@ -701,6 +701,7 @@ send_to_channel (struct ChannelMessageQueueEntry *tnq,
  * @param get_path_length Lenght of @a get_path.
  * @param put_path Path of the put request.
  * @param put_path_length Length of the @a put_path.
+ * @param key The DHT key where the peer was found.
  */
 static void
 handle_regex_result (void *cls,
@@ -708,7 +709,8 @@ handle_regex_result (void *cls,
 		     const struct GNUNET_PeerIdentity *get_path,
 		     unsigned int get_path_length,
 		     const struct GNUNET_PeerIdentity *put_path,
-		     unsigned int put_path_length)
+		     unsigned int put_path_length,
+         const struct GNUNET_HashCode *key)
 {
   struct ChannelState *ts = cls;
   unsigned int apptype;

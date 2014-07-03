@@ -47,6 +47,7 @@ static int ok = 1;
 
 static GNUNET_SCHEDULER_TaskIdentifier die_task;
 
+struct GNUNET_HashCode *dht_key = NULL;
 
 static void
 end (void *cls,
@@ -57,7 +58,11 @@ end (void *cls,
   a = NULL;
   GNUNET_REGEX_search_cancel (s);
   s = NULL;
-  ok = 0;
+  ok = 1;
+  if (dht_key != NULL)
+  {
+    ok = 0;
+  }
 }
 
 
@@ -90,11 +95,13 @@ found_cb (void *cls,
 	  const struct GNUNET_PeerIdentity *get_path,
 	  unsigned int get_path_length,
 	  const struct GNUNET_PeerIdentity *put_path,
-	  unsigned int put_path_length)
+	  unsigned int put_path_length,
+	  const struct GNUNET_HashCode *key)
 {
   GNUNET_SCHEDULER_cancel (die_task);
   die_task =
     GNUNET_SCHEDULER_add_now (&end, NULL);
+  dht_key = (struct GNUNET_HashCode *) key;
 }
 
 
