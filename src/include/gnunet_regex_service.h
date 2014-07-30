@@ -75,6 +75,29 @@ GNUNET_REGEX_announce (const struct GNUNET_CONFIGURATION_Handle *cfg,
 
 
 /**
+ * Announce this with the given EdDSA key under the given regular expression.
+ * Does not free resources, must call #GNUNET_REGEX_announce_cancel for
+ * that.
+ *
+ * @param cfg configuration to use
+ * @param regex Regular expression to announce.
+ * @param refresh_delay after what delay should the announcement be repeated?
+ * @param compression How many characters per edge can we squeeze?
+ * @param key The key to be used when not announcing under this peers ID. If
+ *        NULL is being passed this method will behave like the regular
+ *        GNUNET_REGEX_announce
+ * @return Handle to reuse o free cached resources.
+ *         Must be freed by calling #GNUNET_REGEX_announce_cancel.
+ */
+struct GNUNET_REGEX_Announcement *
+GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
+                       const char *regex,
+                       struct GNUNET_TIME_Relative refresh_delay,
+                       uint16_t compression,
+                       struct GNUNET_CRYPTO_EddsaPrivateKey *key);
+
+
+/**
  * Stop announcing the regex specified by the given handle.
  *
  * @param a handle returned by a previous #GNUNET_REGEX_announce call.
