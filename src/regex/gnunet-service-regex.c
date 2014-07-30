@@ -186,6 +186,33 @@ reannounce (void *cls,
 
 
 /**
+ * Checks if an AnnounceMessage contains an EdDSA key.
+ *
+ * Any key that in different from memset(key, htons(0), sizeof(key)) will be
+ * considered valid.
+ *
+ * @param am The message to parse
+ *
+ * @return A pointer to the EdDSA key or NULL if there is no valid key
+ */
+static struct GNUNET_CRYPTO_EddsaPrivateKey *
+get_eddsa_key (const struct AnnounceMessage *am)
+{
+  uint8_t i;
+  int *buf = (int *) &(am->key);
+
+  for (i = 0; i < sizeof (am->key); i++)
+  {
+    if (0 != ntohs (buf[i]))
+    {
+      return &(am->key);
+    }
+  }
+  return NULL;
+}
+
+
+/**
  * Handle ANNOUNCE message.
  *
  * @param cls closure
@@ -201,6 +228,7 @@ handle_announce (void *cls,
   const char *regex;
   struct ClientEntry *ce;
   uint16_t size;
+  struct GNUNET_CRYPTO_EddsaPrivateKey *key;
 
   size = ntohs (message->size);
   am = (const struct AnnounceMessage *) message;
@@ -211,6 +239,15 @@ handle_announce (void *cls,
     GNUNET_break (0);
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
+  }
+
+  // Get the private EdDSA key
+  // If the message did not contain a valid key it will return NULL. So check
+  // the return value and assign a default key.
+  key = get_eddsa_key (am);
+  if(NULL == key)
+  {
+    key = my_private_key;
   }
 
   ce = GNUNET_new (struct ClientEntry);
@@ -225,7 +262,7 @@ handle_announce (void *cls,
 	      GNUNET_STRINGS_relative_time_to_string (ce->frequency,
 						      GNUNET_NO));
   ce->ah = REGEX_INTERNAL_announce (dht,
-				    my_private_key,
+				    key,
 				    regex,
 				    ntohs (am->compression),
 				    stats);
