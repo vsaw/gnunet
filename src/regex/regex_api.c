@@ -121,34 +121,72 @@ GNUNET_REGEX_announce (const struct GNUNET_CONFIGURATION_Handle *cfg,
 		       struct GNUNET_TIME_Relative refresh_delay,
                        uint16_t compression)
 {
-  struct GNUNET_REGEX_Announcement *a;
-  size_t slen;
+  return GNUNET_REGEX_announce_with_key (cfg,
+                                         regex,
+                                         refresh_delay,
+                                         compression,
+                                         NULL);
+}
 
-  slen = strlen (regex) + 1;
-  if (slen + sizeof (struct AnnounceMessage) >= GNUNET_SERVER_MAX_MESSAGE_SIZE)
-  {
-    GNUNET_log (GNUNET_ERROR_TYPE_WARNING,
-                _("Regex `%s' is too long!\n"),
-                regex);
-    GNUNET_break (0);
-    return NULL;
-  }
-  a = GNUNET_malloc (sizeof (struct GNUNET_REGEX_Announcement) + slen);
-  a->cfg = cfg;
-  a->client = GNUNET_CLIENT_connect ("regex", cfg);
-  if (NULL == a->client)
-  {
-    GNUNET_free (a);
-    return NULL;
-  }
-  a->msg.header.type = htons (GNUNET_MESSAGE_TYPE_REGEX_ANNOUNCE);
-  a->msg.header.size = htons (slen + sizeof (struct AnnounceMessage));
-  a->msg.compression = htons (compression);
-  a->msg.reserved = htons (0);
-  a->msg.refresh_delay = GNUNET_TIME_relative_hton (refresh_delay);
-  memcpy (&a[1], regex, slen);
-  retry_announcement (a);
-  return a;
+
+/**
+ * Announce this with the given EdDSA key under the given regular expression.
+ * Does not free resources, must call #GNUNET_REGEX_announce_cancel for
+ * that.
+ *
+ * @param cfg configuration to use
+ * @param regex Regular expression to announce.
+ * @param refresh_delay after what delay should the announcement be repeated?
+ * @param compression How many characters per edge can we squeeze?
+ * @param key The key to be used when not announcing under this peers ID. If
+ *        NULL is being passed this method will behave like the regular
+ *        GNUNET_REGEX_announce
+ * @return Handle to reuse o free cached resources.
+ *         Must be freed by calling #GNUNET_REGEX_announce_cancel.
+ */
+struct GNUNET_REGEX_Announcement *
+GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
+                       const char *regex,
+                       struct GNUNET_TIME_Relative refresh_delay,
+                       uint16_t compression,
+                       struct GNUNET_CRYPTO_EddsaPrivateKey *key)
+{
+  struct GNUNET_REGEX_Announcement *a;
+   size_t slen;
+
+   slen = strlen (regex) + 1;
+   if (slen + sizeof (struct AnnounceMessage) >= GNUNET_SERVER_MAX_MESSAGE_SIZE)
+   {
+     GNUNET_log (GNUNET_ERROR_TYPE_WARNING,
+                 _("Regex `%s' is too long!\n"),
+                 regex);
+     GNUNET_break (0);
+     return NULL;
+   }
+   a = GNUNET_malloc (sizeof (struct GNUNET_REGEX_Announcement) + slen);
+   a->cfg = cfg;
+   a->client = GNUNET_CLIENT_connect ("regex", cfg);
+   if (NULL == a->client)
+   {
+     GNUNET_free (a);
+     return NULL;
+   }
+   a->msg.header.type = htons (GNUNET_MESSAGE_TYPE_REGEX_ANNOUNCE);
+   a->msg.header.size = htons (slen + sizeof (struct AnnounceMessage));
+   a->msg.compression = htons (compression);
+   a->msg.reserved = htons (0);
+   if(NULL == key)
+   {
+     memset (&a->msg.key, htons (0), sizeof (a->msg.key));
+   }
+   else
+   {
+     a->msg.key = *key;
+   }
+   a->msg.refresh_delay = GNUNET_TIME_relative_hton (refresh_delay);
+   memcpy (&a[1], regex, slen);
+   retry_announcement (a);
+   return a;
 }
 
 

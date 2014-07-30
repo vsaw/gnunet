@@ -39,43 +39,47 @@
 #define BASE_TIMEOUT GNUNET_TIME_relative_multiply (GNUNET_TIME_UNIT_SECONDS, 3)
 
 
+/**
+ * The result the test can have.
+ */
+enum test_result_e {
+  UNKNOWN,
+  FAIL,
+  SUCCESS
+};
+
+
+/**
+ * Closure to be passed to the found callback to tell him the keys and config
+ */
+struct key_config_cls {
+  /**
+   * The config used for runnig this test.
+   */
+  struct GNUNET_CONFIGURATION_Handle *cfg;
+
+  /**
+   * The private EdDSA key used for the announcement
+   */
+  struct GNUNET_CRYPTO_EddsaPrivateKey *eddsa_key;
+};
+
+
 static struct GNUNET_REGEX_Announcement *a;
 
 static struct GNUNET_REGEX_Search *s;
 
-static int ok = 1;
+static enum test_result_e test_result = UNKNOWN;
 
-static GNUNET_SCHEDULER_TaskIdentifier die_task;
-
-struct GNUNET_HashCode *dht_key = NULL;
 
 static void
 end (void *cls,
      const struct GNUNET_SCHEDULER_TaskContext *tc)
 {
-  die_task = GNUNET_SCHEDULER_NO_TASK;
   GNUNET_REGEX_announce_cancel (a);
   a = NULL;
   GNUNET_REGEX_search_cancel (s);
   s = NULL;
-  ok = 1;
-  if (dht_key != NULL)
-  {
-    ok = 0;
-  }
-}
-
-
-static void
-end_badly ()
-{
-  die_task = GNUNET_SCHEDULER_NO_TASK;
-  FPRINTF (stderr, "%s",  "Testcase failed (timeout).\n");
-  GNUNET_REGEX_announce_cancel (a);
-  a = NULL;
-  GNUNET_REGEX_search_cancel (s);
-  s = NULL;
-  ok = 1;
 }
 
 
@@ -98,10 +102,35 @@ found_cb (void *cls,
 	  unsigned int put_path_length,
 	  const struct GNUNET_HashCode *key)
 {
-  GNUNET_SCHEDULER_cancel (die_task);
-  die_task =
-    GNUNET_SCHEDULER_add_now (&end, NULL);
-  dht_key = (struct GNUNET_HashCode *) key;
+  struct key_config_cls *cfg_cls;
+  struct GNUNET_CRYPTO_EddsaPrivateKey *expected_priv_key;
+  struct GNUNET_CRYPTO_EddsaPublicKey pub_key;
+
+  cfg_cls = (struct key_config_cls *) cls;
+
+  // Determine the expected private key from the closure. If it does not
+  // contain one skip the check if the signature is generated from the correct
+  // private key
+  expected_priv_key = cfg_cls->eddsa_key;
+  if (NULL != expected_priv_key)
+  {
+    // Now generate the public key and match it against id
+    GNUNET_CRYPTO_eddsa_key_get_public(expected_priv_key, &pub_key);
+
+    if (memcmp (&pub_key, &(id->public_key), sizeof (struct GNUNET_CRYPTO_EddsaPublicKey)))
+    {
+      test_result = FAIL;
+    }
+  }
+
+  // At last check if the dht_key is not NULL but only do this if the public
+  // key check did not fail. Otherwise it would overwrite the test result
+  if (UNKNOWN == test_result && NULL != key)
+  {
+    test_result = SUCCESS;
+  }
+
+  GNUNET_SCHEDULER_shutdown ();
 }
 
 
@@ -110,17 +139,32 @@ run (void *cls,
      const struct GNUNET_CONFIGURATION_Handle *cfg,
      struct GNUNET_TESTING_Peer *peer)
 {
-  die_task =
-    GNUNET_SCHEDULER_add_delayed (TOTAL_TIMEOUT,
-				  &end_badly, NULL);
-  a = GNUNET_REGEX_announce (cfg,
+  static struct key_config_cls found_cb_cls;
+  found_cb_cls.cfg = cfg;
+  found_cb_cls.eddsa_key = (struct GNUNET_CRYPTO_EddsaPrivateKey *) cls;
+
+  GNUNET_SCHEDULER_add_delayed (TOTAL_TIMEOUT, &end, NULL);
+
+  if (NULL == cls)
+  {
+    a = GNUNET_REGEX_announce (cfg,
 			     "my long prefix - hello world(0|1)*",
-			     GNUNET_TIME_relative_multiply (GNUNET_TIME_UNIT_SECONDS,
-							    5),
+			     GNUNET_TIME_relative_multiply (GNUNET_TIME_UNIT_SECONDS, 5),
 			     1);
+  }
+  else
+  {
+    a = GNUNET_REGEX_announce_with_key (cfg,
+               "my long prefix - hello world(0|1)*",
+               GNUNET_TIME_relative_multiply (GNUNET_TIME_UNIT_SECONDS, 5),
+               1,
+               found_cb_cls.eddsa_key);
+  }
+
+
   s = GNUNET_REGEX_search (cfg,
 			   "my long prefix - hello world0101",
-			   &found_cb, NULL);
+			   &found_cb, &found_cb_cls);
 }
 
 
@@ -131,7 +175,24 @@ main (int argc, char *argv[])
 				    "test_regex_api_data.conf",
 				    &run, NULL))
     return 1;
-  return ok;
+  if (SUCCESS != test_result)
+  {
+    return 1;
+  }
+
+  if (0 != GNUNET_TESTING_peer_run ("test-regex-api",
+                                    "test_regex_api_data.conf",
+                                    &run,
+                                    GNUNET_CRYPTO_eddsa_key_get_anonymous ()))
+  {
+    return 1;
+  }
+  if (SUCCESS != test_result)
+  {
+    return 1;
+  }
+
+  return 0;
 }
 
 /* end of test_regex_api.c */

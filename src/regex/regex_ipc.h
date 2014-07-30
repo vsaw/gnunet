@@ -50,6 +50,14 @@ struct AnnounceMessage
   uint16_t reserved;
 
   /**
+   * The EdDSA key to sign announcements with.
+   *
+   * OPTIONAL If NULL the default key of the peer, as retrieved from the config
+   * of GNUnet Service REGEX will be used.
+   */
+  struct GNUNET_CRYPTO_EddsaPrivateKey key;
+
+  /**
    * Delay between repeated announcements.
    */
   struct GNUNET_TIME_RelativeNBO refresh_delay;
