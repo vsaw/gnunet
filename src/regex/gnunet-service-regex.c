@@ -145,18 +145,18 @@ handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
     {
       if (GNUNET_SCHEDULER_NO_TASK != ce->refresh_task)
       {
-	GNUNET_SCHEDULER_cancel (ce->refresh_task);
-	ce->refresh_task = GNUNET_SCHEDULER_NO_TASK;
+        GNUNET_SCHEDULER_cancel (ce->refresh_task);
+        ce->refresh_task = GNUNET_SCHEDULER_NO_TASK;
       }
       if (NULL != ce->ah)
       {
-	REGEX_INTERNAL_announce_cancel (ce->ah);
-	ce->ah = NULL;
+        REGEX_INTERNAL_announce_cancel (ce->ah);
+        ce->ah = NULL;
       }
       if (NULL != ce->sh)
       {
-	REGEX_INTERNAL_search_cancel (ce->sh);
-	ce->sh = NULL;
+        REGEX_INTERNAL_search_cancel (ce->sh);
+        ce->sh = NULL;
       }
       GNUNET_CONTAINER_DLL_remove (client_head, client_tail, ce);
       GNUNET_free (ce);
