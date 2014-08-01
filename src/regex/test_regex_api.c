@@ -43,7 +43,6 @@
  * The result the test can have.
  */
 enum test_result_e {
-  UNKNOWN,
   FAIL,
   SUCCESS
 };
@@ -65,15 +64,22 @@ struct key_config_cls {
 };
 
 
+/**
+ * The signature of a test case so that it can be added to the main loop that
+ * runs all test cases
+ */
+typedef enum test_result_e (*Test_Case)(void);
+
+
 static struct GNUNET_REGEX_Announcement *a;
 
 static struct GNUNET_REGEX_Search *s;
 
-static enum test_result_e test_result = UNKNOWN;
+static enum test_result_e test_case_result = FAIL;
 
 
 static void
-end (void *cls,
+announce_search_peer_shutdown (void *cls,
      const struct GNUNET_SCHEDULER_TaskContext *tc)
 {
   GNUNET_REGEX_announce_cancel (a);
@@ -94,7 +100,7 @@ end (void *cls,
  * @param put_path_length Length of the put_path.
  */
 static void
-found_cb (void *cls,
+announce_search_peer_found_cb (void *cls,
 	  const struct GNUNET_PeerIdentity *id,
 	  const struct GNUNET_PeerIdentity *get_path,
 	  unsigned int get_path_length,
@@ -105,6 +111,12 @@ found_cb (void *cls,
   struct key_config_cls *cfg_cls;
   struct GNUNET_CRYPTO_EddsaPrivateKey *expected_priv_key;
   struct GNUNET_CRYPTO_EddsaPublicKey pub_key;
+
+  /*
+   * Assume these tests to be successful unless one of the following checks
+   * fails.
+   */
+  test_case_result = SUCCESS;
 
   cfg_cls = (struct key_config_cls *) cls;
 
@@ -119,15 +131,15 @@ found_cb (void *cls,
 
     if (memcmp (&pub_key, &(id->public_key), sizeof (struct GNUNET_CRYPTO_EddsaPublicKey)))
     {
-      test_result = FAIL;
+      test_case_result = FAIL;
     }
   }
 
   // At last check if the dht_key is not NULL but only do this if the public
   // key check did not fail. Otherwise it would overwrite the test result
-  if (UNKNOWN == test_result && NULL != key)
+  if (NULL == key)
   {
-    test_result = SUCCESS;
+    test_case_result = FAIL;
   }
 
   GNUNET_SCHEDULER_shutdown ();
@@ -135,7 +147,7 @@ found_cb (void *cls,
 
 
 static void
-run (void *cls,
+announce_search_peer_run (void *cls,
      const struct GNUNET_CONFIGURATION_Handle *cfg,
      struct GNUNET_TESTING_Peer *peer)
 {
@@ -143,7 +155,7 @@ run (void *cls,
   found_cb_cls.cfg = cfg;
   found_cb_cls.eddsa_key = (struct GNUNET_CRYPTO_EddsaPrivateKey *) cls;
 
-  GNUNET_SCHEDULER_add_delayed (TOTAL_TIMEOUT, &end, NULL);
+  GNUNET_SCHEDULER_add_delayed (TOTAL_TIMEOUT, &announce_search_peer_shutdown, NULL);
 
   if (NULL == cls)
   {
@@ -164,32 +176,56 @@ run (void *cls,
 
   s = GNUNET_REGEX_search (cfg,
 			   "my long prefix - hello world0101",
-			   &found_cb, &found_cb_cls);
+			   &announce_search_peer_found_cb, &found_cb_cls);
+}
+
+
+static enum test_result_e
+launch_test_peer (GNUNET_TESTING_TestMain tm, void *cls)
+{
+  if (0 != GNUNET_TESTING_peer_run ("test-regex-api",
+            "test_regex_api_data.conf",
+            tm, cls))
+    return FAIL;
+  if (SUCCESS != test_case_result)
+  {
+    return FAIL;
+  }
+
+  return SUCCESS;
+}
+
+
+static enum test_result_e
+test_announce_search_as_peer (void)
+{
+  return launch_test_peer (&announce_search_peer_run, NULL);
+}
+
+
+static enum test_result_e
+test_announce_search_anonymously (void)
+{
+  return launch_test_peer (&announce_search_peer_run,
+                           GNUNET_CRYPTO_eddsa_key_get_anonymous ());
 }
 
 
 int
 main (int argc, char *argv[])
 {
-  if (0 != GNUNET_TESTING_peer_run ("test-regex-api",
-				    "test_regex_api_data.conf",
-				    &run, NULL))
-    return 1;
-  if (SUCCESS != test_result)
-  {
-    return 1;
-  }
+  Test_Case tests[] = { test_announce_search_as_peer,
+      test_announce_search_anonymously };
 
-  if (0 != GNUNET_TESTING_peer_run ("test-regex-api",
-                                    "test_regex_api_data.conf",
-                                    &run,
-                                    GNUNET_CRYPTO_eddsa_key_get_anonymous ()))
+  unsigned int num_tests = sizeof (tests) / sizeof (Test_Case);
+  unsigned int i;
+  for (i = 0; i < num_tests; i++)
   {
-    return 1;
-  }
-  if (SUCCESS != test_result)
-  {
-    return 1;
+    test_case_result = FAIL;
+    if (SUCCESS != tests[i] ())
+    {
+      return 1;
+    }
   }
 
   return 0;
