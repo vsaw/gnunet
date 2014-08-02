@@ -126,13 +126,14 @@ cleanup_task (void *cls, const struct GNUNET_SCHEDULER_TaskContext *tc)
 
 
 /**
- * A client disconnected.  Remove all of its data structure entries.
+ * Find the client entry for the client
  *
- * @param cls closure, NULL
- * @param client identification of the client
+ * @param client A connected client
+ *
+ * @return The ClientEntry, or NULL if the client can not be found
  */
-static void
-handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
+static struct ClientEntry *
+find_client_entry (struct GNUNET_SERVER_Client *client)
 {
   struct ClientEntry *ce;
   struct ClientEntry *nx;
@@ -143,24 +144,47 @@ handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
     nx = ce->next;
     if (ce->client == client)
     {
-      if (GNUNET_SCHEDULER_NO_TASK != ce->refresh_task)
-      {
-        GNUNET_SCHEDULER_cancel (ce->refresh_task);
-        ce->refresh_task = GNUNET_SCHEDULER_NO_TASK;
-      }
-      if (NULL != ce->ah)
-      {
-        REGEX_INTERNAL_announce_cancel (ce->ah);
-        ce->ah = NULL;
-      }
-      if (NULL != ce->sh)
-      {
-        REGEX_INTERNAL_search_cancel (ce->sh);
-        ce->sh = NULL;
-      }
-      GNUNET_CONTAINER_DLL_remove (client_head, client_tail, ce);
-      GNUNET_free (ce);
+      return ce;
     }
+  }
+
+  return NULL;
+}
+
+
+/**
+ * A client disconnected.  Remove all of its data structure entries.
+ *
+ * @param cls closure, NULL
+ * @param client identification of the client
+ */
+static void
+handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
+{
+  struct ClientEntry *ce;
+  ce = find_client_entry (client);
+
+  // Notice that there might not be a client entry if the message of the client
+  // was illegal. He will still disconnect though!
+  if (NULL != ce)
+  {
+    if (GNUNET_SCHEDULER_NO_TASK != ce->refresh_task)
+    {
+      GNUNET_SCHEDULER_cancel (ce->refresh_task);
+      ce->refresh_task = GNUNET_SCHEDULER_NO_TASK;
+    }
+    if (NULL != ce->ah)
+    {
+      REGEX_INTERNAL_announce_cancel (ce->ah);
+      ce->ah = NULL;
+    }
+    if (NULL != ce->sh)
+    {
+      REGEX_INTERNAL_search_cancel (ce->sh);
+      ce->sh = NULL;
+    }
+    GNUNET_CONTAINER_DLL_remove (client_head, client_tail, ce);
+    GNUNET_free (ce);
   }
 }
 
@@ -295,6 +319,8 @@ handle_announce (void *cls,
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
   }
+
+  GNUNET_assert (NULL == find_client_entry (client));
   GNUNET_CONTAINER_DLL_insert (client_head,
 			       client_tail,
 			       ce);
@@ -398,6 +424,8 @@ handle_search (void *cls,
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
   }
+
+  GNUNET_assert (NULL == find_client_entry (client));
   GNUNET_CONTAINER_DLL_insert (client_head,
 			       client_tail,
 			       ce);
