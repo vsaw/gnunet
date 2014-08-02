@@ -46,60 +46,102 @@ struct GNUNET_REGEX_Announcement
   const struct GNUNET_CONFIGURATION_Handle *cfg;
 
   /**
+   * If this is not NULL the client is currently in progress of transmitting
+   * data to the service
+   */
+  struct GNUNET_CLIENT_TransmitHandle *active_transmission;
+
+  /**
    * Message we're sending to the service.
    */
   struct AnnounceMessage msg;
 };
 
 
-/**
- * We got a response (!?) or disconnect after asking regex
- * to do the announcement.  Retry.
- *
- * @param cls the 'struct GNUNET_REGEX_Announcement' to retry
- * @param msg NULL on disconnect
- */
-static void
-handle_a_reconnect (void *cls,
-		    const struct GNUNET_MessageHeader *msg);
+static int
+send_announcement_to_service (struct GNUNET_REGEX_Announcement *a);
 
 
 /**
- * Try sending the announcement request to regex.  On
- * errors (i.e. regex died), try again.
+ * Function called to notify a client about the connection begin ready
+ * to queue more data.  @a buf will be NULL and @a size zero if the
+ * connection was closed for writing in the meantime.
  *
- * @param a the announcement to retry
+ * @param cls closure
+ * @param size number of bytes available in @a buf
+ * @param buf where the callee should write the message
+ * @return number of bytes written to @a buf
  */
-static void
-retry_announcement (struct GNUNET_REGEX_Announcement *a)
+static size_t
+announce_transmit_ready_cb (void *cls,
+                            size_t size,
+                            void *buf)
 {
-  GNUNET_assert (NULL != a->client);
-  GNUNET_assert (GNUNET_OK ==
-		 GNUNET_CLIENT_transmit_and_get_response (a->client,
-							  &a->msg.header,
-							  GNUNET_TIME_UNIT_FOREVER_REL,
-							  GNUNET_YES,
-							  &handle_a_reconnect,
-							  a));
+  struct GNUNET_REGEX_Announcement *a = (struct GNUNET_REGEX_Announcement *) cls;
+  size_t message_len = ntohs (a->msg.header.size);
+
+  if (NULL == buf || size < message_len)
+  {
+    // close connection and retry
+    GNUNET_CLIENT_disconnect (a->client);
+    a->client = NULL;
+
+    send_announcement_to_service (a);
+    return 0;
+  }
+
+  // Consider the transmission as complete because it is to late to call
+  // cancel for the transmission anyhow.
+  a->active_transmission = NULL;
+  memcpy (buf, &a->msg.header, message_len);
+  return message_len;
 }
 
 
 /**
- * We got a response (!?) or disconnect after asking regex
- * to do the announcement.  Retry.
+ * Send the given announcement to the REGEX service
  *
- * @param cls the 'struct GNUNET_REGEX_Announcement' to retry
- * @param msg NULL on disconnect
+ * @param a The announcement to send
+ *
+ * @return GNUNET_YES on success, GNUNET_FALSE otherwise
+ *
+ * If the client is not connected to the service this will try to open a
+ * connection automatically.
+ *
+ * This will also schedule retransmissions if necessary until either the
+ * message was sent successfully or the Announcement has been cancelled.
  */
-static void
-handle_a_reconnect (void *cls,
-		    const struct GNUNET_MessageHeader *msg)
+static int
+send_announcement_to_service (struct GNUNET_REGEX_Announcement *a)
 {
-  struct GNUNET_REGEX_Announcement *a = cls;
+  GNUNET_log (GNUNET_ERROR_TYPE_DEBUG, "send_announcement_to_service\n");
 
-  GNUNET_CLIENT_disconnect (a->client);
-  a->client = GNUNET_CLIENT_connect ("regex", a->cfg);
-  retry_announcement (a);
+  if (NULL == a->client)
+  {
+    a->client = GNUNET_CLIENT_connect ("regex", a->cfg);
+    if (NULL == a->client)
+    {
+      GNUNET_REGEX_announce_cancel (a);
+      return GNUNET_NO;
+    }
+  }
+
+  struct GNUNET_CLIENT_TransmitHandle *ath;
+  ath = GNUNET_CLIENT_notify_transmit_ready (a->client,
+                                       ntohs (a->msg.header.size),
+                                       GNUNET_TIME_UNIT_FOREVER_REL,
+                                       GNUNET_YES,
+                                       &announce_transmit_ready_cb,
+                                       a);
+
+  if (NULL == ath)
+  {
+    GNUNET_REGEX_announce_cancel (a);
+    return GNUNET_NO;
+  }
+
+  a->active_transmission = ath;
+  return GNUNET_YES;
 }
 
 
@@ -152,41 +194,42 @@ GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
                        struct GNUNET_CRYPTO_EddsaPrivateKey *key)
 {
   struct GNUNET_REGEX_Announcement *a;
-   size_t slen;
+  size_t slen;
 
-   slen = strlen (regex) + 1;
-   if (slen + sizeof (struct AnnounceMessage) >= GNUNET_SERVER_MAX_MESSAGE_SIZE)
-   {
-     GNUNET_log (GNUNET_ERROR_TYPE_WARNING,
-                 _("Regex `%s' is too long!\n"),
-                 regex);
-     GNUNET_break (0);
-     return NULL;
-   }
-   a = GNUNET_malloc (sizeof (struct GNUNET_REGEX_Announcement) + slen);
-   a->cfg = cfg;
-   a->client = GNUNET_CLIENT_connect ("regex", cfg);
-   if (NULL == a->client)
-   {
-     GNUNET_free (a);
-     return NULL;
-   }
-   a->msg.header.type = htons (GNUNET_MESSAGE_TYPE_REGEX_ANNOUNCE);
-   a->msg.header.size = htons (slen + sizeof (struct AnnounceMessage));
-   a->msg.compression = htons (compression);
-   a->msg.reserved = htons (0);
-   if(NULL == key)
-   {
-     memset (&a->msg.key, htons (0), sizeof (a->msg.key));
-   }
-   else
-   {
-     a->msg.key = *key;
-   }
-   a->msg.refresh_delay = GNUNET_TIME_relative_hton (refresh_delay);
-   memcpy (&a[1], regex, slen);
-   retry_announcement (a);
-   return a;
+  slen = strlen (regex) + 1;
+  if (slen + sizeof (struct AnnounceMessage) >= GNUNET_SERVER_MAX_MESSAGE_SIZE)
+  {
+    GNUNET_log (GNUNET_ERROR_TYPE_WARNING,
+                _("Regex `%s' is too long!\n"),
+                regex);
+    GNUNET_break (0);
+    return NULL;
+  }
+
+  a = GNUNET_malloc (sizeof (struct GNUNET_REGEX_Announcement) + slen);
+  a->cfg = cfg;
+  a->client = NULL;
+  a->active_transmission = NULL;
+  a->msg.header.type = htons (GNUNET_MESSAGE_TYPE_REGEX_ANNOUNCE);
+  a->msg.header.size = htons (slen + sizeof (struct AnnounceMessage));
+  a->msg.compression = htons (compression);
+  a->msg.reserved = htons (0);
+  if(NULL == key)
+  {
+    memset (&a->msg.key, htons (0), sizeof (a->msg.key));
+  }
+  else
+  {
+    a->msg.key = *key;
+  }
+  a->msg.refresh_delay = GNUNET_TIME_relative_hton (refresh_delay);
+  memcpy (&a[1], regex, slen);
+
+  if (GNUNET_YES == send_announcement_to_service (a))
+  {
+    return a;
+  }
+  return NULL;
 }
 
 
@@ -198,7 +241,14 @@ GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
 void
 GNUNET_REGEX_announce_cancel (struct GNUNET_REGEX_Announcement *a)
 {
-  GNUNET_CLIENT_disconnect (a->client);
+  if (NULL != a->active_transmission)
+  {
+    GNUNET_CLIENT_notify_transmit_ready_cancel(a->active_transmission);
+  }
+  if (NULL != a->client)
+  {
+    GNUNET_CLIENT_disconnect (a->client);
+  }
   GNUNET_free (a);
 }
 
