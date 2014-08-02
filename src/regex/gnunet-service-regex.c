@@ -213,6 +213,31 @@ get_eddsa_key (const struct AnnounceMessage *am)
 
 
 /**
+ * Parse a message to see if it is a valid announce message
+ *
+ * @param message The message to parse
+ *
+ * @return A pointer to the regex of the message, or NULL if the message could
+ *         not be parsed
+ */
+static const char *
+parse_announce_message (const struct GNUNET_MessageHeader *message)
+{
+  uint16_t size = ntohs (message->size);
+  const struct AnnounceMessage *am = (const struct AnnounceMessage *) message;
+  const char *regex = (const char *) &am[1];
+
+  if ( (size <= sizeof (struct AnnounceMessage)) ||
+       ('\0' != regex[size - sizeof (struct AnnounceMessage) - 1]) )
+  {
+    return NULL;
+  }
+
+  return regex;
+}
+
+
+/**
  * Handle ANNOUNCE message.
  *
  * @param cls closure
@@ -227,19 +252,15 @@ handle_announce (void *cls,
   const struct AnnounceMessage *am;
   const char *regex;
   struct ClientEntry *ce;
-  uint16_t size;
   struct GNUNET_CRYPTO_EddsaPrivateKey *key;
 
-  size = ntohs (message->size);
-  am = (const struct AnnounceMessage *) message;
-  regex = (const char *) &am[1];
-  if ( (size <= sizeof (struct AnnounceMessage)) ||
-       ('\0' != regex[size - sizeof (struct AnnounceMessage) - 1]) )
-  {
+  regex = parse_announce_message (message);
+  if (NULL == regex) {
     GNUNET_break (0);
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
   }
+  am = (const struct AnnounceMessage *) message;
 
   // Get the private EdDSA key
   // If the message did not contain a valid key it will return NULL. So check
