@@ -1945,6 +1945,16 @@ extern "C"
  */
 #define GNUNET_MESSAGE_TYPE_REGEX_RESULT 622
 
+/**
+ * When looking up Regex Entries in the DHT
+ */
+#define GNUNET_MESSAGE_TYPE_REGEX_GET_ACCEPTING_DHT_ENTRIES 623
+
+/**
+ * The accepting DHT entries
+ */
+#define GNUNET_MESSAGE_TYPE_REGEX_ACCEPTING_DHT_ENTRIES 624
+
 /*******************************************************************************
  * IDENTITY message types
  ******************************************************************************/

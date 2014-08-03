@@ -144,7 +144,8 @@ check_PROGRAMS = \
   test_regex_iterate_api \
   test_regex_proofs \
   test_regex_graph_api \
-  test_regex_api
+  test_regex_api \
+  test_regex_api_dht
 
 if ENABLE_TEST_RUN
  AM_TESTS_ENVIRONMENT=export GNUNET_PREFIX=$${GNUNET_PREFIX:-@libdir@};export PATH=$${GNUNET_PREFIX:-@prefix@}/bin:$$PATH;
@@ -166,6 +167,10 @@ test_regex_api_LDADD = -lm \
   libgnunetregex.la \
   $(top_builddir)/src/testing/libgnunettesting.la \
   $(top_builddir)/src/util/libgnunetutil.la
+  
+test_regex_api_dht_SOURCES = \
+  test_regex_api_dht.c
+test_regex_api_dht_LDADD = $(test_regex_api_LDADD)  
 
 test_regex_iterate_api_SOURCES = \
   test_regex_iterate_api.c

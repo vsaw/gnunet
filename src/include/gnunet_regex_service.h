@@ -98,6 +98,39 @@ GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
 
 
 /**
+ * Callback for #GNUNET_REGEX_announce_get_accepting_dht_entries
+ *
+ * @param cls The closure for the callback
+ * @param a The original announcement
+ * @param accepting_states A map containing all accepting states, or NULL if
+ *        something went terribly wrong
+ */
+typedef void (*GNUNET_REGEX_Announce_Dht_Handler)(void *cls,
+    struct GNUNET_REGEX_Announcement *a,
+    struct GNUNET_CONTAINER_MultiHashMap *accepting_states);
+
+
+/**
+ * Find all accepting states for the given Announcement
+ *
+ * @param a The announcement
+ * @param callback The function to call once all accepting states have been
+ *        found
+ * @param cls Closure for the callback
+ *
+ * @return GNUNET_YES if the request was accepted, GNUNET_NO otherwise
+ *
+ * This function enables a look into the DHT to find all the accepting states
+ * of the DFA that power the announcement.
+ */
+int
+GNUNET_REGEX_announce_get_accepting_dht_entries (
+    struct GNUNET_REGEX_Announcement *a,
+    GNUNET_REGEX_Announce_Dht_Handler callback,
+    void * cls);
+
+
+/**
  * Stop announcing the regex specified by the given handle.
  *
  * @param a handle returned by a previous #GNUNET_REGEX_announce call.
