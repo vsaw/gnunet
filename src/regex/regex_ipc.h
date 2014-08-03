@@ -116,5 +116,50 @@ struct ResultMessage
 };
 
 
+/**
+ * Request the accepting DHT-Keys for an Announcement
+ */
+struct DhtKeyRequestMessage
+{
+  /**
+   * Type is GNUNET_MESSAGE_TYPE_REGEX_GET_ACCEPTING_DHT_ENTRIES
+   */
+  struct GNUNET_MessageHeader header;
+
+  /**
+   * The original Announce message for which the accepting states need to be
+   * looked up
+   */
+  struct AnnounceMessage original_announce;
+};
+
+
+/**
+ * Response for accepting DHT-Keys
+ */
+struct DhtKeyResponseMessage
+{
+  /**
+   * Type is GNUNET_MESSAGE_TYPE_REGEX_ACCEPTING_DHT_ENTRIES
+   */
+  struct GNUNET_MessageHeader header;
+
+  /**
+   * The amount of accepting DHT keys
+   */
+  uint16_t num_entries;
+
+  /* Followed by list of struct GNUNET_HashCode + 0-terminated proof
+   * Essentially the list looks like this:
+   *
+   *     | hashCode0 | proof0 | hashCode1 | proof1 | ... | hashCodeN | proofN |
+   *
+   * Where each proof is a '\0'-terminated string of variable length. So there
+   * is no direct way to access the i-th hashCode other than iterating through
+   * the list.
+   */
+};
+
+
 /* end of regex_ipc.h */
 #endif

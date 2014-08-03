@@ -35,6 +35,7 @@
 *.la
 *.lo
 *.po
+/src/*/.libs
 
 # /contrib/
 /contrib/gns-bcd.pdf
@@ -974,6 +975,7 @@
 /src/regex/libgnunetregex_internal.a
 /src/regex/test_regex_api_data.conf
 /src/regex/test_regex_api
+/src/regex/test_regex_api_dht
 /src/regex/regex.conf
 /src/regex/gnunet-service-regex
 /src/regex/perf-regex
