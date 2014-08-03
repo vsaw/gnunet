@@ -259,6 +259,31 @@ void
 REGEX_INTERNAL_search_cancel (struct REGEX_INTERNAL_Search *h);
 
 
+/**
+ * Find all the accepting DHT entries
+ *
+ * @param announcement The announcement to find all accepting DHT states
+ * @param map The map to populate with the results
+ *
+ * @return The amount of bytes added to the map, or a negative number on error
+ *
+ * The map should be empty when passed to the function. It is recommended to
+ * create the map as follows:
+ *
+ *     GNUNET_CONTAINER_multihashmap_create(initial_size, GNUNET_NO);
+ *
+ * The return value is calculated as follows:
+ *
+ *     #AcceptingStates * sizeof (struct GNUNET_HashCode) + CummulatedLenghtOfAllDfaProofsIncludingNullTerminator
+ *
+ * If the return value is negative the map can be in an undefined state and
+ * should not be trusted
+ */
+int32_t
+REGEX_INTERNAL_announce_get_accepting_dht_entries (struct REGEX_INTERNAL_Announcement *announcement,
+                                                   struct GNUNET_CONTAINER_MultiHashMap *map);
+
+
 #if 0                           /* keep Emacsens' auto-indent happy */
 {
 #endif
