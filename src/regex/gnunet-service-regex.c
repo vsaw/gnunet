@@ -126,13 +126,14 @@ cleanup_task (void *cls, const struct GNUNET_SCHEDULER_TaskContext *tc)
 
 
 /**
- * A client disconnected.  Remove all of its data structure entries.
+ * Find the client entry for the client
  *
- * @param cls closure, NULL
- * @param client identification of the client
+ * @param client A connected client
+ *
+ * @return The ClientEntry, or NULL if the client can not be found
  */
-static void
-handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
+static struct ClientEntry *
+find_client_entry (struct GNUNET_SERVER_Client *client)
 {
   struct ClientEntry *ce;
   struct ClientEntry *nx;
@@ -143,24 +144,47 @@ handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
     nx = ce->next;
     if (ce->client == client)
     {
-      if (GNUNET_SCHEDULER_NO_TASK != ce->refresh_task)
-      {
-	GNUNET_SCHEDULER_cancel (ce->refresh_task);
-	ce->refresh_task = GNUNET_SCHEDULER_NO_TASK;
-      }
-      if (NULL != ce->ah)
-      {
-	REGEX_INTERNAL_announce_cancel (ce->ah);
-	ce->ah = NULL;
-      }
-      if (NULL != ce->sh)
-      {
-	REGEX_INTERNAL_search_cancel (ce->sh);
-	ce->sh = NULL;
-      }
-      GNUNET_CONTAINER_DLL_remove (client_head, client_tail, ce);
-      GNUNET_free (ce);
+      return ce;
     }
+  }
+
+  return NULL;
+}
+
+
+/**
+ * A client disconnected.  Remove all of its data structure entries.
+ *
+ * @param cls closure, NULL
+ * @param client identification of the client
+ */
+static void
+handle_client_disconnect (void *cls, struct GNUNET_SERVER_Client *client)
+{
+  struct ClientEntry *ce;
+  ce = find_client_entry (client);
+
+  // Notice that there might not be a client entry if the message of the client
+  // was illegal. He will still disconnect though!
+  if (NULL != ce)
+  {
+    if (GNUNET_SCHEDULER_NO_TASK != ce->refresh_task)
+    {
+      GNUNET_SCHEDULER_cancel (ce->refresh_task);
+      ce->refresh_task = GNUNET_SCHEDULER_NO_TASK;
+    }
+    if (NULL != ce->ah)
+    {
+      REGEX_INTERNAL_announce_cancel (ce->ah);
+      ce->ah = NULL;
+    }
+    if (NULL != ce->sh)
+    {
+      REGEX_INTERNAL_search_cancel (ce->sh);
+      ce->sh = NULL;
+    }
+    GNUNET_CONTAINER_DLL_remove (client_head, client_tail, ce);
+    GNUNET_free (ce);
   }
 }
 
@@ -213,6 +237,236 @@ get_eddsa_key (const struct AnnounceMessage *am)
 
 
 /**
+ * Parse a message to see if it is a valid announce message
+ *
+ * @param message The message to parse
+ *
+ * @return A pointer to the regex of the message, or NULL if the message could
+ *         not be parsed
+ */
+static const char *
+parse_announce_message (const struct GNUNET_MessageHeader *message)
+{
+  uint16_t size = ntohs (message->size);
+  const struct AnnounceMessage *am = (const struct AnnounceMessage *) message;
+  const char *regex = (const char *) &am[1];
+
+  if ( (size <= sizeof (struct AnnounceMessage)) ||
+       ('\0' != regex[size - sizeof (struct AnnounceMessage) - 1]) )
+  {
+    return NULL;
+  }
+
+  return regex;
+}
+
+
+/**
+ * Parse the given message to see if it is a valid DHT Key Request
+ *
+ * @param message The message to parse
+ *
+ * @return A pointer to the request, or NULL if the message could not be parsed
+ *
+ * This will also validate the attached AnnouncementMessage
+ */
+static const struct DhtKeyRequestMessage *
+parse_dht_key_request (const struct GNUNET_MessageHeader *msg)
+{
+  // Check the message to be big enough to actually carry a DHT message
+  if (sizeof (struct DhtKeyRequestMessage) > ntohs (msg->size))
+  {
+    return NULL;
+  }
+
+  // First some message casting
+  const struct DhtKeyRequestMessage *dht_msg;
+  dht_msg = (const struct DhtKeyRequestMessage *) msg;
+  const struct GNUNET_MessageHeader *maybe_announce_msg;
+  maybe_announce_msg = (const struct GNUNET_MessageHeader *) &dht_msg->original_announce;
+
+  // Then check if the announce is valid
+  if (NULL == parse_announce_message (maybe_announce_msg))
+  {
+    return NULL;
+  }
+
+  size_t expected_size = sizeof (struct GNUNET_MessageHeader) + ntohs (maybe_announce_msg->size);
+  if (expected_size != ntohs (msg->size))
+  {
+    GNUNET_log (GNUNET_ERROR_TYPE_WARNING,
+                "Illegal DHT Message Size: Expected %d Actual %d\n",
+                expected_size,
+                ntohs (msg->size));
+    return NULL;
+  }
+
+  return dht_msg;
+}
+
+
+/**
+ * Fill the response buffer with the values from the DHT and free memory of the
+ * HashMap
+ *
+ * @param cls A pointer to the pointer to the buffer
+ * @param key The key
+ * @param value The proof as a '\0' terminated string. Will be freed when
+ *        copied to buffer.
+ *
+ * @cls is points to the following
+ *
+ *     next free byte in buf <-- buf_ptr <-- cls
+ *
+ * So dereference it to get a a pointer to the next free byte in the buffer.
+ * Then when the data has been copied update buf_ptr to make sure the next
+ * iteration also know the next free byte in the buffer.
+ */
+static int
+fill_dht_response_buffer(void *cls,
+                         const struct GNUNET_HashCode *key,
+                         void *value)
+{
+  uint8_t **buf_ptr_ptr = (uint8_t **) cls;
+  uint8_t *buf = *buf_ptr_ptr;
+
+  memcpy(buf, key, sizeof (struct GNUNET_HashCode));
+  memcpy(buf + sizeof (struct GNUNET_HashCode), value, strlen ((char *) value) + 1);
+
+  buf += sizeof (struct GNUNET_HashCode) + strlen ((char *) value) + 1;
+  *buf_ptr_ptr = buf;
+
+  // The value is in the buffer so free the memory of the HashMap value
+  GNUNET_free (value);
+
+  return GNUNET_YES;
+}
+
+
+/**
+ * Prepare the response and send it to the client
+ *
+ * @param client The client to respond to
+ * @param accepting_keys A hashmap containing all accepting DHT keys and the
+ *        proofs as value
+ * @param map_size_bytes The amount of bytes stored in the map (keys and
+ *        strings combined)
+ */
+static void
+prepare_and_send_dht_response (struct GNUNET_SERVER_Client *client,
+                               struct GNUNET_CONTAINER_MultiHashMap *accepting_keys,
+                               int32_t map_size_bytes)
+{
+  size_t total_msg_size = sizeof (struct DhtKeyResponseMessage) + map_size_bytes;
+  if (GNUNET_SERVER_MAX_MESSAGE_SIZE < total_msg_size)
+  {
+    return;
+  }
+
+  struct DhtKeyResponseMessage *msg = GNUNET_malloc (total_msg_size);
+  msg->header.type = htons (GNUNET_MESSAGE_TYPE_REGEX_ACCEPTING_DHT_ENTRIES);
+  msg->header.size = htons (total_msg_size);
+  msg->num_entries = htons (GNUNET_CONTAINER_multihashmap_size (accepting_keys));
+
+  // Now build the return message.
+  // We allocate the buffer here and then pass a pointer to the buffer to the
+  // iterator. The idea is that the iterator always gets a pointer, to the
+  // pointer that points to the next free byte in the buffer
+  //
+  //   buf (always points to the beginning of the buffer)
+  //   |
+  //   |
+  // +---------------------------+
+  // | B | u | f | f | e | r | … |
+  // +---------------------------+
+  //       ^
+  //       |
+  //       buf_cls (advances as buffer gets filled) <-- pointer to buf_cls
+  //                                                    (passed as a closure)
+  uint8_t *buf = (uint8_t *) &msg[1];
+  uint8_t *buf_cls = buf;
+  int iterate_result = GNUNET_CONTAINER_multihashmap_iterate (accepting_keys,
+                                         &fill_dht_response_buffer,
+                                         &buf_cls);
+  GNUNET_assert (iterate_result == GNUNET_CONTAINER_multihashmap_size (accepting_keys));
+  GNUNET_CONTAINER_multihashmap_destroy (accepting_keys);
+  GNUNET_log (GNUNET_ERROR_TYPE_DEBUG,
+             "0x%x + 0x%x = 0x%x; 0x%x\n",
+             buf,
+             map_size_bytes,
+             buf + map_size_bytes,
+             buf_cls);
+  GNUNET_assert (buf + map_size_bytes == buf_cls);
+
+  GNUNET_SERVER_notification_context_unicast (nc, client,
+                   &msg->header, GNUNET_NO);
+
+  GNUNET_free (msg);
+}
+
+
+/**
+ * Handle the accepting DHT lookup request
+ *
+ * @param cls Always NULL
+ * @param client The client that sent the message
+ * @param message The lookup request from the client
+ *
+ * This will issue the internal DFA lookup and queue the sending of the
+ * response if the lookup was successful.
+ */
+static void
+handle_dht_key_get_message (void *cls,
+                            struct GNUNET_SERVER_Client *client,
+                            const struct GNUNET_MessageHeader *message)
+{
+  const struct DhtKeyRequestMessage *dht_msg = parse_dht_key_request(message);
+  if (NULL == dht_msg)
+  {
+    GNUNET_log (GNUNET_ERROR_TYPE_ERROR, "Got broken DHT Message\n");
+    GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
+    return;
+  }
+  GNUNET_log (GNUNET_ERROR_TYPE_DEBUG, "Got valid DHT Message\n");
+
+  // Based on the announce message and the connected client, try to find the
+  // internal announcement in the client list (client_head, client_tail)
+  struct ClientEntry *ce = find_client_entry (client);
+  if (NULL == ce)
+  {
+    GNUNET_log (GNUNET_ERROR_TYPE_ERROR, "No client entry for DHT Message\n");
+    GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
+    return;
+  }
+
+  // Then you can call regex iterate to find all the accepting states
+  struct GNUNET_CONTAINER_MultiHashMap *accepting_keys;
+  accepting_keys = GNUNET_CONTAINER_multihashmap_create(1, GNUNET_NO);
+  int32_t map_size = REGEX_INTERNAL_announce_get_accepting_dht_entries (ce->ah, accepting_keys);
+  if (map_size < 0)
+  {
+    GNUNET_CONTAINER_multihashmap_destroy (accepting_keys);
+    GNUNET_log (GNUNET_ERROR_TYPE_ERROR, "Internal DHT key lookup failed\n");
+    GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
+    return;
+  }
+  GNUNET_log (GNUNET_ERROR_TYPE_DEBUG,
+                "Have %d = %d * %d + x = %d + x bytes in the map\n",
+                map_size,
+                GNUNET_CONTAINER_multihashmap_size (accepting_keys),
+                sizeof (struct GNUNET_HashCode),
+                sizeof (struct GNUNET_HashCode) * GNUNET_CONTAINER_multihashmap_size (accepting_keys));
+
+  // The lookup worked out, so ACK this and store the client to send him the
+  // response once we have formatted it
+  GNUNET_SERVER_notification_context_add (nc, client);
+  GNUNET_SERVER_receive_done (client, GNUNET_OK);
+
+  prepare_and_send_dht_response (client, accepting_keys, map_size);
+}
+
+
+/**
  * Handle ANNOUNCE message.
  *
  * @param cls closure
@@ -227,19 +481,15 @@ handle_announce (void *cls,
   const struct AnnounceMessage *am;
   const char *regex;
   struct ClientEntry *ce;
-  uint16_t size;
   struct GNUNET_CRYPTO_EddsaPrivateKey *key;
 
-  size = ntohs (message->size);
-  am = (const struct AnnounceMessage *) message;
-  regex = (const char *) &am[1];
-  if ( (size <= sizeof (struct AnnounceMessage)) ||
-       ('\0' != regex[size - sizeof (struct AnnounceMessage) - 1]) )
-  {
+  regex = parse_announce_message (message);
+  if (NULL == regex) {
     GNUNET_break (0);
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
   }
+  am = (const struct AnnounceMessage *) message;
 
   // Get the private EdDSA key
   // If the message did not contain a valid key it will return NULL. So check
@@ -274,6 +524,8 @@ handle_announce (void *cls,
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
   }
+
+  GNUNET_assert (NULL == find_client_entry (client));
   GNUNET_CONTAINER_DLL_insert (client_head,
 			       client_tail,
 			       ce);
@@ -377,6 +629,8 @@ handle_search (void *cls,
     GNUNET_SERVER_receive_done (client, GNUNET_SYSERR);
     return;
   }
+
+  GNUNET_assert (NULL == find_client_entry (client));
   GNUNET_CONTAINER_DLL_insert (client_head,
 			       client_tail,
 			       ce);
@@ -399,6 +653,7 @@ run (void *cls, struct GNUNET_SERVER_Handle *server,
   static const struct GNUNET_SERVER_MessageHandler handlers[] = {
     {&handle_announce, NULL, GNUNET_MESSAGE_TYPE_REGEX_ANNOUNCE, 0},
     {&handle_search, NULL, GNUNET_MESSAGE_TYPE_REGEX_SEARCH, 0},
+    {&handle_dht_key_get_message, NULL, GNUNET_MESSAGE_TYPE_REGEX_GET_ACCEPTING_DHT_ENTRIES, 0},
     {NULL, NULL, 0, 0}
   };
 

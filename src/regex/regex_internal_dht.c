@@ -809,4 +809,84 @@ REGEX_INTERNAL_search_cancel (struct REGEX_INTERNAL_Search *h)
 }
 
 
+/**
+ * Contains the accepting DHT key entries, and some meta-data
+ */
+struct Accepting_Dht_Entries_Result
+{
+  /**
+   * The map containing the keys and proofs
+   */
+  struct GNUNET_CONTAINER_MultiHashMap *map;
+
+  /**
+   * Total size in bytes added to the map. Negative value indicate errors.
+   */
+  int32_t size;
+};
+
+
+/**
+ * Regex callback iterator to add accepting states to the Hashmap.
+ *
+ * @param cls closure.
+ * @param key hash for current state.
+ * @param proof proof for current state.
+ * @param accepting GNUNET_YES if this is an accepting state, GNUNET_NO if not.
+ * @param num_edges number of edges leaving current state.
+ * @param edges edges leaving current state.
+ */
+static void
+accepting_state_iterator (void *cls,
+                const struct GNUNET_HashCode *key,
+                const char *proof,
+                int accepting,
+                unsigned int num_edges,
+                const struct REGEX_BLOCK_Edge *edges)
+{
+  struct Accepting_Dht_Entries_Result *iterator_result = cls;
+
+  // If an error already happened so skip the evaluation
+  if (iterator_result->size < 0)
+  {
+    return;
+  }
+
+  if (GNUNET_YES == accepting)
+  {
+    // add a duplicate of the proof to the map
+    // the proof is ephemeral. it is not guaranteed that it is there after the
+    // execution of this function
+    int put_result = GNUNET_CONTAINER_multihashmap_put(iterator_result->map,
+                                                       key,
+                                                       (void *) GNUNET_strdup (proof),
+                                                       GNUNET_CONTAINER_MULTIHASHMAPOPTION_MULTIPLE);
+    if (GNUNET_OK != put_result)
+    {
+      iterator_result->size = -1;
+    }
+    else
+    {
+      iterator_result->size += sizeof (struct GNUNET_HashCode) + strlen (proof) + 1;
+    }
+  }
+}
+
+
+int32_t
+REGEX_INTERNAL_announce_get_accepting_dht_entries (struct REGEX_INTERNAL_Announcement *announcement,
+                                                   struct GNUNET_CONTAINER_MultiHashMap *map)
+{
+  struct Accepting_Dht_Entries_Result result;
+  result.size = 0;
+  result.map = map;
+
+  REGEX_INTERNAL_iterate_reachable_edges (announcement->dfa,
+                                          &accepting_state_iterator,
+                                          &result);
+
+  return result.size;
+}
+
+
 /* end of regex_internal_dht.c */
