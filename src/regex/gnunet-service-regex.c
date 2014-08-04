@@ -222,17 +222,13 @@ reannounce (void *cls,
 static struct GNUNET_CRYPTO_EddsaPrivateKey *
 get_eddsa_key (const struct AnnounceMessage *am)
 {
-  uint8_t i;
-  int *buf = (int *) &(am->key);
-
-  for (i = 0; i < sizeof (am->key); i++)
+  struct GNUNET_CRYPTO_EddsaPrivateKey zero_key;
+  memset (&zero_key, 0, sizeof (zero_key));
+  if (0 == memcmp (&am->key, &zero_key, sizeof (zero_key)))
   {
-    if (0 != ntohs (buf[i]))
-    {
-      return &(am->key);
-    }
+    return NULL;
   }
-  return NULL;
+  return &am->key;
 }
 
 

@@ -546,7 +546,7 @@ GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
   a->msg.reserved = htons (0);
   if(NULL == key)
   {
-    memset (&a->msg.key, htons (0), sizeof (a->msg.key));
+    memset (&a->msg.key, 0, sizeof (a->msg.key));
   }
   else
   {
