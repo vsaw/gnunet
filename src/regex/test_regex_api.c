@@ -120,19 +120,18 @@ announce_search_peer_found_cb (void *cls,
 
   cfg_cls = (struct key_config_cls *) cls;
 
-  // Determine the expected private key from the closure. If it does not
-  // contain one skip the check if the signature is generated from the correct
-  // private key
   expected_priv_key = cfg_cls->eddsa_key;
-  if (NULL != expected_priv_key)
+  if (NULL == expected_priv_key)
   {
-    // Now generate the public key and match it against id
-    GNUNET_CRYPTO_eddsa_key_get_public(expected_priv_key, &pub_key);
+    expected_priv_key = GNUNET_CRYPTO_eddsa_key_create_from_configuration (cfg_cls->cfg);
+  }
 
-    if (memcmp (&pub_key, &(id->public_key), sizeof (struct GNUNET_CRYPTO_EddsaPublicKey)))
-    {
-      test_case_result = FAIL;
-    }
+  // Now generate the public key and match it against id
+  GNUNET_CRYPTO_eddsa_key_get_public(expected_priv_key, &pub_key);
+
+  if (memcmp (&pub_key, &(id->public_key), sizeof (struct GNUNET_CRYPTO_EddsaPublicKey)))
+  {
+    test_case_result = FAIL;
   }
 
   // At last check if the dht_key is not NULL but only do this if the public
