@@ -520,7 +520,7 @@ GNUNET_REGEX_announce_with_key (const struct GNUNET_CONFIGURATION_Handle *cfg,
                        const char *regex,
                        struct GNUNET_TIME_Relative refresh_delay,
                        uint16_t compression,
-                       struct GNUNET_CRYPTO_EddsaPrivateKey *key)
+                       const struct GNUNET_CRYPTO_EddsaPrivateKey *key)
 {
   struct GNUNET_REGEX_Announcement *a;
   size_t slen;
