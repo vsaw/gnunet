@@ -145,7 +145,8 @@ check_PROGRAMS = \
   test_regex_proofs \
   test_regex_graph_api \
   test_regex_api \
-  test_regex_api_dht
+  test_regex_api_dht \
+  test_regex_anonymous_api
 
 if ENABLE_TEST_RUN
  AM_TESTS_ENVIRONMENT=export GNUNET_PREFIX=$${GNUNET_PREFIX:-@libdir@};export PATH=$${GNUNET_PREFIX:-@prefix@}/bin:$$PATH;
@@ -198,6 +199,12 @@ test_regex_graph_api_LDADD = -lm \
   libgnunetregexblock.la \
   $(top_builddir)/src/util/libgnunetutil.la
 
+test_regex_anonymous_api_SOURCES = test_regex_anonymous_api.c
+test_regex_anonymous_api_LDADD = -lm \
+  $(top_builddir)/src/testbed/libgnunettestbed.la \
+  $(top_builddir)/src/dht/libgnunetdht.la \
+  $(top_builddir)/src/util/libgnunetutil.la \
+  libgnunetregex.la
 
 EXTRA_DIST = \
   regex_simulation_profiler_test.conf \
